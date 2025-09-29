@@ -1,0 +1,24 @@
+﻿################################################################################
+# 此 .gitignore 文件已由 Microsoft(R) Visual Studio 自动创建。
+################################################################################
+
+# Build and Object Folders  
+bin/  
+obj/  
+  
+# Nuget packages directory  
+packages/  
+
+#Logs
+logs/
+.vs/ 
+
+#editor
+
+# User-specific files  
+*.suo  
+*.user  
+*.sln.docstates  
+/IFM.ITS.Plugin/Dlls/torch_cpu.dll
+/IFM.Web.Entry/Properties/launchSettings.json
+/IFM.Web.Entry/Properties/launchSettings.json
