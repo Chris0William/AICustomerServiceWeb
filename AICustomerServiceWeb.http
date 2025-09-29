@@ -1,0 +1,6 @@
+@AICustomerServiceWeb_HostAddress = http://localhost:5048
+
+GET {{AICustomerServiceWeb_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
