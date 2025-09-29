@@ -62,20 +62,39 @@ public class AIService
 
         var answer = response.Content ?? "抱歉，我无法理解您的问题。";
 
-        if (!string.IsNullOrEmpty(ExecutionContext.LastDatabaseExecution))
+        // 诊断：同时检查两个值
+        Console.WriteLine("[AIService] ========== Checking ExecutionContext State ==========");
+        var lastExecution = ExecutionContext.LastDatabaseExecution;
+        var currentDetails = ExecutionContext.CurrentExecutionDetails;
+        Console.WriteLine($"[AIService] LastDatabaseExecution: {(lastExecution != null ? lastExecution.Length + " chars" : "NULL")}");
+        Console.WriteLine($"[AIService] CurrentExecutionDetails: {(currentDetails != null ? "Has Value" : "NULL")}");
+
+        if (lastExecution != null && currentDetails == null)
         {
-            answer = ExecutionContext.LastDatabaseExecution + "\n\n" + answer;
-            // 不要在这里清理，等最后再清理
+            Console.WriteLine("[AIService] WARNING: LastDatabaseExecution has value but CurrentExecutionDetails is NULL!");
+            Console.WriteLine("[AIService] This indicates ExecutionDetails was not properly set or was cleared.");
+        }
+
+        if (!string.IsNullOrEmpty(lastExecution))
+        {
+            answer = lastExecution + "\n\n" + answer;
         }
 
         var assistantTokenCount = EstimateTokenCount(answer);
 
-        // 获取执行详情（如果有）
+        // 直接从ExecutionContext获取ExecutionDetails
         string? executionDetailsJson = null;
-        if (ExecutionContext.CurrentExecutionDetails != null)
+        if (currentDetails != null)
         {
-            executionDetailsJson = JsonSerializer.Serialize(ExecutionContext.CurrentExecutionDetails,
+            executionDetailsJson = JsonSerializer.Serialize(currentDetails,
                 new JsonSerializerOptions { WriteIndented = true });
+
+            Console.WriteLine($"[AIService] ExecutionDetails to save: {executionDetailsJson.Length} characters");
+            Console.WriteLine($"[AIService] RAGFlow steps count: {currentDetails.RAGFlowSteps.Count}");
+        }
+        else
+        {
+            Console.WriteLine("[AIService] No ExecutionDetails found in ExecutionContext");
         }
 
         var assistantMessageId = await _conversationService.SaveMessage(conversationId, "assistant", answer, assistantTokenCount, executionDetailsJson);

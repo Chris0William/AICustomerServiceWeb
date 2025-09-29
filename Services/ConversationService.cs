@@ -79,6 +79,8 @@ public class ConversationService
 
     public async Task<long> SaveMessage(string conversationId, string role, string content, int tokenCount, string? executionDetails)
     {
+        Console.WriteLine($"[ConversationService] Saving message with ExecutionDetails: {(executionDetails != null ? executionDetails.Length + " chars" : "null")}");
+
         var sql = @"INSERT INTO ai_message
             (ConversationId, Role, Content, ExecutionDetails, TokenCount, CreatedTime)
             VALUES (@ConversationId, @Role, @Content, @ExecutionDetails, @TokenCount, NOW());

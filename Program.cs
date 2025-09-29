@@ -29,6 +29,7 @@ var ragflowApiKey = config["RAGFlow:ApiKey"]!;
 var ragflowEndpoint = config["RAGFlow:Endpoint"]!;
 var q2sqlKbId = config["RAGFlow:Q2SQLKbId"]!;
 var ddlKbId = config["RAGFlow:DDLKbId"]!;
+var businessRulesKbId = config["RAGFlow:BusinessRulesKbId"]!;
 
 var aiConnectionString = config.GetConnectionString("AICustomerService")!;
 var productionConnectionString = config.GetConnectionString("Production")!;
@@ -40,7 +41,7 @@ var systemPrompt = config["AISettings:SystemPrompt"]!;
 
 builder.Services.AddSingleton(sp =>
 {
-    return new RAGFlowService(ragflowApiKey, ragflowEndpoint, q2sqlKbId, ddlKbId);
+    return new RAGFlowService(ragflowApiKey, ragflowEndpoint, q2sqlKbId, ddlKbId, businessRulesKbId);
 });
 
 builder.Services.AddSingleton(sp =>

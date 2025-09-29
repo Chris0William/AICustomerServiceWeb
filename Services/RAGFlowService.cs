@@ -34,13 +34,15 @@ public class RAGFlowService
 
     private readonly string _q2sqlKbId;
     private readonly string _ddlKbId;
+    private readonly string _businessRulesKbId;
 
-    public RAGFlowService(string apiKey, string endpoint, string q2sqlKbId, string ddlKbId)
+    public RAGFlowService(string apiKey, string endpoint, string q2sqlKbId, string ddlKbId, string businessRulesKbId)
     {
         _apiKey = apiKey;
         _endpoint = endpoint;
         _q2sqlKbId = q2sqlKbId;
         _ddlKbId = ddlKbId;
+        _businessRulesKbId = businessRulesKbId;
         _httpClient = new HttpClient();
         _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
     }
@@ -53,6 +55,11 @@ public class RAGFlowService
     public async Task<(string content, RetrievalResult details)> RetrieveDDLWithDetails(string question, int topK = 3)
     {
         return await RetrieveFromKnowledgeBaseWithDetails(_ddlKbId, question, topK, "DDL+Description");
+    }
+
+    public async Task<(string content, RetrievalResult details)> RetrieveBusinessRulesWithDetails(string question, int topK = 3)
+    {
+        return await RetrieveFromKnowledgeBaseWithDetails(_businessRulesKbId, question, topK, "业务规则");
     }
 
     // 保留旧接口以保持兼容性
@@ -151,6 +158,12 @@ public class RAGFlowService
             result.RetrievedCount = retrievedItems.Count;
             result.RetrievedItems = retrievedItems;
             result.FullResponse = responseContent;
+
+            Console.WriteLine($"[RAGFlowService] Retrieved {retrievedItems.Count} items from KB: {kbId}");
+            if (retrievedItems.Count > 0)
+            {
+                Console.WriteLine($"[RAGFlowService] First item: {retrievedItems[0].Content.Substring(0, Math.Min(100, retrievedItems[0].Content.Length))}...");
+            }
 
             return (results.ToString(), result);
         }

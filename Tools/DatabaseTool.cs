@@ -36,6 +36,10 @@ public class DatabaseTool
     public async Task<string> QueryDatabase(
         [Description("用户的自然语言问题")] string question)
     {
+        Console.WriteLine($"[DatabaseTool] ========== QueryDatabase CALLED ==========");
+        Console.WriteLine($"[DatabaseTool] Question: {question}");
+        Console.WriteLine($"[DatabaseTool] Thread ID: {System.Threading.Thread.CurrentThread.ManagedThreadId}");
+
         var processLog = new StringBuilder();
         var sw = Stopwatch.StartNew();
 
@@ -57,6 +61,12 @@ public class DatabaseTool
             // 记录RAGFlow检索结果
             if (q2sqlDetails != null)
             {
+                Console.WriteLine($"[DatabaseTool] Q2SQL Details - Retrieved: {q2sqlDetails.RetrievedItems?.Count ?? 0} items");
+                if (q2sqlDetails.RetrievedItems != null && q2sqlDetails.RetrievedItems.Count > 0)
+                {
+                    Console.WriteLine($"[DatabaseTool] First Q2SQL item: {q2sqlDetails.RetrievedItems[0].Content.Substring(0, Math.Min(100, q2sqlDetails.RetrievedItems[0].Content.Length))}...");
+                }
+
                 executionDetails.RAGFlowSteps.Add(new RAGFlowStep
                 {
                     StepNumber = 1,
@@ -73,6 +83,10 @@ public class DatabaseTool
                     ExecutionTimeMs = q2sqlDetails.ExecutionTimeMs
                 });
             }
+            else
+            {
+                Console.WriteLine("[DatabaseTool] Q2SQL Details is null!");
+            }
 
             processLog.AppendLine("**步骤2**: 检索相关表结构（DDL+字段描述）...");
             var (ddlContent, ddlDetails) = await _ragflow.RetrieveDDLWithDetails(question, 8);
@@ -84,6 +98,12 @@ public class DatabaseTool
             // 记录DDL检索结果
             if (ddlDetails != null)
             {
+                Console.WriteLine($"[DatabaseTool] DDL Details - Retrieved: {ddlDetails.RetrievedItems?.Count ?? 0} items");
+                if (ddlDetails.RetrievedItems != null && ddlDetails.RetrievedItems.Count > 0)
+                {
+                    Console.WriteLine($"[DatabaseTool] First DDL item: {ddlDetails.RetrievedItems[0].Content.Substring(0, Math.Min(100, ddlDetails.RetrievedItems[0].Content.Length))}...");
+                }
+
                 executionDetails.RAGFlowSteps.Add(new RAGFlowStep
                 {
                     StepNumber = 2,
@@ -100,10 +120,51 @@ public class DatabaseTool
                     ExecutionTimeMs = ddlDetails.ExecutionTimeMs
                 });
             }
+            else
+            {
+                Console.WriteLine("[DatabaseTool] DDL Details is null!");
+            }
 
-            processLog.AppendLine("**步骤3**: 生成SQL语句...");
+            processLog.AppendLine("**步骤3**: 检索业务规则文档...");
+            var (businessRulesContent, businessRulesDetails) = await _ragflow.RetrieveBusinessRulesWithDetails(question, 5);
+            var businessRules = businessRulesContent;
+            var businessRulesCount = businessRulesDetails?.RetrievedItems?.Count ?? 0;
+            processLog.AppendLine($"✅ 检索到 {businessRulesCount} 条相关业务规则");
+            processLog.AppendLine();
+
+            // 记录业务规则检索结果
+            if (businessRulesDetails != null)
+            {
+                Console.WriteLine($"[DatabaseTool] Business Rules Details - Retrieved: {businessRulesDetails.RetrievedItems?.Count ?? 0} items");
+                if (businessRulesDetails.RetrievedItems != null && businessRulesDetails.RetrievedItems.Count > 0)
+                {
+                    Console.WriteLine($"[DatabaseTool] First Business Rule item: {businessRulesDetails.RetrievedItems[0].Content.Substring(0, Math.Min(100, businessRulesDetails.RetrievedItems[0].Content.Length))}...");
+                }
+
+                executionDetails.RAGFlowSteps.Add(new RAGFlowStep
+                {
+                    StepNumber = 3,
+                    StepName = "业务规则检索",
+                    KnowledgeBaseId = businessRulesDetails.KnowledgeBaseId,
+                    QueryText = businessRulesDetails.QueryText,
+                    RetrievedCount = businessRulesDetails.RetrievedItems?.Count ?? 0,
+                    RetrievedItems = businessRulesDetails.RetrievedItems?.Select(item => new Models.RetrievedItem
+                    {
+                        Content = item.Content,
+                        Similarity = item.Similarity,
+                        DocumentName = item.DocumentName
+                    }).ToList() ?? new List<Models.RetrievedItem>(),
+                    ExecutionTimeMs = businessRulesDetails.ExecutionTimeMs
+                });
+            }
+            else
+            {
+                Console.WriteLine("[DatabaseTool] Business Rules Details is null!");
+            }
+
+            processLog.AppendLine("**步骤4**: 生成SQL语句...");
             var sqlGenerateStart = DateTime.Now;
-            var sqlPrompt = BuildSQLPrompt(question, q2sqlExamples, ddl);
+            var sqlPrompt = BuildSQLPrompt(question, q2sqlExamples, ddl, businessRules);
             var sqlResponse = await _kernel.InvokePromptAsync(sqlPrompt);
             var sql = ExtractSQL(sqlResponse.ToString());
             var sqlGenerateTime = (int)(DateTime.Now - sqlGenerateStart).TotalMilliseconds;
@@ -156,9 +217,16 @@ public class DatabaseTool
                     executionDetails.ResultRowCount = ExtractRowCount(result);
                     executionDetails.TotalExecutionTime = (int)sw.ElapsedMilliseconds;
 
+                    // 保存执行详情到ExecutionContext
                     AICustomerServiceWeb.Services.ExecutionContext.LastDatabaseExecution = processLog.ToString();
                     AICustomerServiceWeb.Services.ExecutionContext.CurrentExecutionDetails = executionDetails;
-                    return result;
+
+                    Console.WriteLine($"[DatabaseTool] ExecutionDetails saved with {executionDetails.RAGFlowSteps.Count} RAGFlow steps");
+                    Console.WriteLine($"[DatabaseTool] GeneratedSQL: {executionDetails.GeneratedSQL?.Length ?? 0} chars");
+                    Console.WriteLine($"[DatabaseTool] ResultRowCount: {executionDetails.ResultRowCount}");
+
+                    // 返回执行过程 + 查询结果
+                    return processLog.ToString() + "\n" + result;
                 }
                 catch (MySqlException ex)
                 {
@@ -172,7 +240,7 @@ public class DatabaseTool
                         processLog.AppendLine();
 
                         var retryStart = DateTime.Now;
-                        sqlPrompt = BuildSQLPrompt(question, q2sqlExamples, ddl, ex.Message);
+                        sqlPrompt = BuildSQLPrompt(question, q2sqlExamples, ddl, businessRules, ex.Message);
                         sqlResponse = await _kernel.InvokePromptAsync(sqlPrompt);
                         sql = ExtractSQL(sqlResponse.ToString());
                         var retryTime = (int)(DateTime.Now - retryStart).TotalMilliseconds;
@@ -223,7 +291,7 @@ public class DatabaseTool
         }
     }
 
-    private string BuildSQLPrompt(string question, string examples, string ddl, string? errorFeedback = null)
+    private string BuildSQLPrompt(string question, string examples, string ddl, string businessRules, string? errorFeedback = null)
     {
         var prompt = new StringBuilder();
         prompt.AppendLine("你是一个MySQL SQL专家。请根据用户问题生成准确的查询语句。");
@@ -240,6 +308,13 @@ public class DatabaseTool
         {
             prompt.AppendLine("相关表结构和字段说明：");
             prompt.AppendLine(ddl);
+            prompt.AppendLine();
+        }
+
+        if (!string.IsNullOrEmpty(businessRules))
+        {
+            prompt.AppendLine("业务规则说明（帮助理解数据关系和业务逻辑）：");
+            prompt.AppendLine(businessRules);
             prompt.AppendLine();
         }
 
@@ -262,7 +337,8 @@ public class DatabaseTool
         prompt.AppendLine("6. 🔴 只能使用上述提供的表结构和字段");
         prompt.AppendLine("7. 🔴 严禁编造或猜测不存在的表名和字段名");
         prompt.AppendLine("8. 🔴 如果上述表结构不够准确，可以尝试使用相似的表或字段（如type、Type、TYPE视为同一字段）");
-        prompt.AppendLine("9. 如果实在无法生成SQL，返回：ERROR: 无法基于提供的表结构回答此问题");
+        prompt.AppendLine("9. 根据业务规则理解数据之间的关联关系");
+        prompt.AppendLine("10. 如果实在无法生成SQL，返回：ERROR: 无法基于提供的表结构回答此问题");
         prompt.AppendLine();
         prompt.AppendLine("SQL：");
 

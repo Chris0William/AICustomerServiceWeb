@@ -320,11 +320,18 @@ async function exportConversation() {
 
 // 查看消息的执行详情
 function viewExecutionDetails(messageId) {
+    console.log('viewExecutionDetails called with messageId:', messageId);
+
     // 从sessionStorage获取消息
     const messages = JSON.parse(sessionStorage.getItem(`messages_${currentConversationId}`) || '[]');
+    console.log('Messages from sessionStorage:', messages);
+    console.log('Looking for message with id:', messageId);
+
     const message = messages.find(m => m.id == messageId);
+    console.log('Found message:', message);
 
     if (!message || !message.executionDetails) {
+        console.log('No execution details found. Message:', message);
         alert('该消息没有执行详情');
         return;
     }
