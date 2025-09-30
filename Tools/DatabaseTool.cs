@@ -89,7 +89,15 @@ public class DatabaseTool
             }
 
             processLog.AppendLine("**步骤2**: 检索相关表结构（DDL+字段描述）...");
-            var (ddlContent, ddlDetails) = await _ragflow.RetrieveDDLWithDetails(question, 8);
+            var (ddlContent, ddlDetails) = await _ragflow.RetrieveDDLWithDetails(question, 10);
+
+            // 如果检索结果太少，记录警告
+            if (ddlDetails?.RetrievedItems?.Count == 0)
+            {
+                Console.WriteLine($"[DatabaseTool] WARNING: No DDL found for question: {question}");
+                Console.WriteLine("[DatabaseTool] This may cause LLM to generate incorrect table names!");
+            }
+
             var ddl = ddlContent;
             var ddlCount = ddlDetails?.RetrievedItems?.Count ?? 0;
             processLog.AppendLine($"✅ 检索到 {ddlCount} 个相关表结构和字段描述");
@@ -336,8 +344,8 @@ public class DatabaseTool
         prompt.AppendLine("5. 如果是统计查询，使用COUNT()");
         prompt.AppendLine("6. 🔴 只能使用上述提供的表结构和字段");
         prompt.AppendLine("7. 🔴 严禁编造或猜测不存在的表名和字段名");
-        prompt.AppendLine("8. 🔴 如果上述表结构不够准确，可以尝试使用相似的表或字段（如type、Type、TYPE视为同一字段）");
-        prompt.AppendLine("9. 根据业务规则理解数据之间的关联关系");
+        prompt.AppendLine("8. 🔴 优先参考业务规则文档理解数据模型和表之间的关联关系");
+        prompt.AppendLine("9. 🔴 如果业务规则与DDL都提供了相关信息，以业务规则为准");
         prompt.AppendLine("10. 如果实在无法生成SQL，返回：ERROR: 无法基于提供的表结构回答此问题");
         prompt.AppendLine();
         prompt.AppendLine("SQL：");
