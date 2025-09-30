@@ -62,10 +62,12 @@ builder.Services.AddScoped(sp =>
 {
     var kernelBuilder = Kernel.CreateBuilder();
 
+#pragma warning disable SKEXP0010 // 抑制实验性API警告
     kernelBuilder.AddOpenAIChatCompletion(
         modelId: defaultModel,
         endpoint: new Uri(dashScopeEndpoint),
         apiKey: dashScopeApiKey);
+#pragma warning restore SKEXP0010
 
     var kernel = kernelBuilder.Build();
 
@@ -73,18 +75,15 @@ builder.Services.AddScoped(sp =>
     var executionContext = sp.GetRequiredService<AICustomerServiceWeb.Services.ExecutionContext>();
     var tracker = sp.GetRequiredService<AICustomerServiceWeb.Tools.ToolCallTracker>();
 
-    // ReAct模式：注册独立的工具
-    // 1. RAGFlow知识库查询工具
-    var ragflowTool = new RAGFlowTool(ragflow, executionContext, tracker);
-    kernel.Plugins.AddFromObject(ragflowTool, "RAGFlowTool");
+    // 使用DatabaseTool模式（性能更优）
+    var dbTool = new DatabaseTool(productionConnectionString, kernel, ragflow, executionContext);
+    kernel.Plugins.AddFromObject(dbTool, "DatabaseTool");
 
-    // 2. SQL生成和执行工具
-    var sqlTool = new SQLTool(productionConnectionString, executionContext, kernel, tracker);
-    kernel.Plugins.AddFromObject(sqlTool, "SQLTool");
-
-    // 3. 保留原有的DatabaseTool作为备用（可选）
-    // var dbTool = new DatabaseTool(productionConnectionString, kernel, ragflow, executionContext);
-    // kernel.Plugins.AddFromObject(dbTool, "DatabaseTool");
+    // ReAct模式工具（暂时禁用）
+    // var ragflowTool = new RAGFlowTool(ragflow, executionContext, tracker);
+    // kernel.Plugins.AddFromObject(ragflowTool, "RAGFlowTool");
+    // var sqlTool = new SQLTool(productionConnectionString, executionContext, kernel, tracker);
+    // kernel.Plugins.AddFromObject(sqlTool, "SQLTool");
 
     return kernel;
 });
