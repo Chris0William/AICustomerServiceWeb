@@ -13,26 +13,37 @@ public class DatabaseTool
     private readonly string _connectionString;
     private readonly Kernel _kernel;
     private readonly RAGFlowService _ragflow;
+    private readonly Services.ExecutionContext _executionContext;
 
     public DatabaseTool(
         string connectionString,
         Kernel kernel,
-        RAGFlowService ragflow)
+        RAGFlowService ragflow,
+        Services.ExecutionContext executionContext)
     {
         _connectionString = connectionString;
         _kernel = kernel;
         _ragflow = ragflow;
+        _executionContext = executionContext;
     }
 
     [KernelFunction]
-    [Description(@"查询数据库获取实时数据。
+    [Description(@"MANDATORY: This tool MUST be called for ANY database query request.
+查询数据库获取实时数据。
+
+关键词触发（出现以下词汇必须调用）：
+- 数量词：多少、几个、数量、统计、总数
+- 查询词：查询、显示、列出、查看、获取
+- 实体词：用户、部门、设备、任务、班组、人员、承包商、公司、员工
+
 适用场景：
-- 统计查询（如：有多少用户？设备数量？）
+- 统计查询（如：有多少用户？设备数量？承包商数量？）
 - 列表查询（如：显示所有部门、查看用户列表）
 - 筛选查询（如：查询某部门的用户、某时间段的任务）
 - 聚合分析（如：按部门统计人数）
+- 任何涉及数据库数据的查询
 
-自动将自然语言转换为SQL并执行。")]
+重要：只有此工具能生成执行过程。禁止手动编写执行步骤。")]
     public async Task<string> QueryDatabase(
         [Description("用户的自然语言问题")] string question)
     {
@@ -190,8 +201,8 @@ public class DatabaseTool
                 executionDetails.ErrorMessage = sql;
                 executionDetails.TotalExecutionTime = (int)sw.ElapsedMilliseconds;
 
-                AICustomerServiceWeb.Services.ExecutionContext.LastDatabaseExecution = processLog.ToString();
-                AICustomerServiceWeb.Services.ExecutionContext.CurrentExecutionDetails = executionDetails;
+                _executionContext.LastDatabaseExecution = processLog.ToString();
+                _executionContext.CurrentExecutionDetails = executionDetails;
                 return "抱歉，当前数据库结构无法回答您的问题。可能的原因：\n1. 缺少相关的数据表或字段\n2. 字段命名不符合查询需求\n\n建议：\n- 请尝试更换问法或提供更具体的查询条件\n- 联系管理员检查数据库结构是否完整";
             }
 
@@ -202,7 +213,32 @@ public class DatabaseTool
             processLog.AppendLine("```");
             processLog.AppendLine();
 
-            processLog.AppendLine("**步骤4**: 执行SQL查询...");
+            // 验证SQL中的表是否存在
+            processLog.AppendLine("**步骤5**: 验证表存在性...");
+            var tableValidation = await ValidateTablesInSQL(sql);
+            if (!tableValidation.IsValid)
+            {
+                processLog.AppendLine($"❌ 表验证失败: {tableValidation.ErrorMessage}");
+                processLog.AppendLine($"不存在的表: {string.Join(", ", tableValidation.MissingTables)}");
+
+                executionDetails.Status = "Failed";
+                executionDetails.ErrorMessage = tableValidation.ErrorMessage;
+                executionDetails.TotalExecutionTime = (int)sw.ElapsedMilliseconds;
+
+                _executionContext.LastDatabaseExecution = processLog.ToString();
+                _executionContext.CurrentExecutionDetails = executionDetails;
+
+                return $"数据库查询失败：生成的SQL引用了不存在的表。\n\n" +
+                       $"不存在的表: {string.Join(", ", tableValidation.MissingTables)}\n\n" +
+                       $"可能的原因：\n" +
+                       $"1. RAGFlow知识库中的表结构信息过时\n" +
+                       $"2. 模型基于错误的先验知识生成了SQL\n\n" +
+                       $"建议：请更换问法或联系管理员更新知识库。";
+            }
+            processLog.AppendLine("✅ 表验证通过");
+            processLog.AppendLine();
+
+            processLog.AppendLine("**步骤6**: 执行SQL查询...");
 
             string result;
             int maxRetries = 2;
@@ -226,8 +262,8 @@ public class DatabaseTool
                     executionDetails.TotalExecutionTime = (int)sw.ElapsedMilliseconds;
 
                     // 保存执行详情到ExecutionContext
-                    AICustomerServiceWeb.Services.ExecutionContext.LastDatabaseExecution = processLog.ToString();
-                    AICustomerServiceWeb.Services.ExecutionContext.CurrentExecutionDetails = executionDetails;
+                    _executionContext.LastDatabaseExecution = processLog.ToString();
+                    _executionContext.CurrentExecutionDetails = executionDetails;
 
                     Console.WriteLine($"[DatabaseTool] ExecutionDetails saved with {executionDetails.RAGFlowSteps.Count} RAGFlow steps");
                     Console.WriteLine($"[DatabaseTool] GeneratedSQL: {executionDetails.GeneratedSQL?.Length ?? 0} chars");
@@ -273,14 +309,14 @@ public class DatabaseTool
                         executionDetails.ErrorMessage = lastError;
                         executionDetails.TotalExecutionTime = (int)sw.ElapsedMilliseconds;
 
-                        AICustomerServiceWeb.Services.ExecutionContext.LastDatabaseExecution = processLog.ToString();
-                        AICustomerServiceWeb.Services.ExecutionContext.CurrentExecutionDetails = executionDetails;
+                        _executionContext.LastDatabaseExecution = processLog.ToString();
+                        _executionContext.CurrentExecutionDetails = executionDetails;
                         return $"数据库查询失败：{ex.Message}";
                     }
                 }
             }
 
-            AICustomerServiceWeb.Services.ExecutionContext.LastDatabaseExecution = processLog.ToString();
+            _executionContext.LastDatabaseExecution = processLog.ToString();
             return "未知错误";
         }
         catch (Exception ex)
@@ -293,8 +329,8 @@ public class DatabaseTool
             executionDetails.ErrorMessage = ex.Message;
             executionDetails.TotalExecutionTime = (int)sw.ElapsedMilliseconds;
 
-            AICustomerServiceWeb.Services.ExecutionContext.LastDatabaseExecution = processLog.ToString();
-            AICustomerServiceWeb.Services.ExecutionContext.CurrentExecutionDetails = executionDetails;
+            _executionContext.LastDatabaseExecution = processLog.ToString();
+            _executionContext.CurrentExecutionDetails = executionDetails;
             return $"数据库查询失败：{ex.Message}";
         }
     }
@@ -434,6 +470,64 @@ public class DatabaseTool
         }
 
         return result.ToString();
+    }
+
+    private class TableValidationResult
+    {
+        public bool IsValid { get; set; }
+        public List<string> MissingTables { get; set; } = new List<string>();
+        public string ErrorMessage { get; set; } = "";
+    }
+
+    private async Task<TableValidationResult> ValidateTablesInSQL(string sql)
+    {
+        var result = new TableValidationResult { IsValid = true };
+
+        // 提取SQL中的表名（简单解析，支持基本的FROM和JOIN）
+        var tableNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // 匹配 FROM table_name 或 FROM `table_name`
+        var fromMatches = System.Text.RegularExpressions.Regex.Matches(sql, @"FROM\s+`?(\w+)`?", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        foreach (System.Text.RegularExpressions.Match match in fromMatches)
+        {
+            if (match.Groups.Count > 1)
+            {
+                tableNames.Add(match.Groups[1].Value);
+            }
+        }
+
+        // 匹配 JOIN table_name 或 JOIN `table_name`
+        var joinMatches = System.Text.RegularExpressions.Regex.Matches(sql, @"JOIN\s+`?(\w+)`?", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        foreach (System.Text.RegularExpressions.Match match in joinMatches)
+        {
+            if (match.Groups.Count > 1)
+            {
+                tableNames.Add(match.Groups[1].Value);
+            }
+        }
+
+        // 验证每个表是否存在
+        using var conn = new MySqlConnection(_connectionString);
+        await conn.OpenAsync();
+
+        foreach (var tableName in tableNames)
+        {
+            using var cmd = new MySqlCommand($"SHOW TABLES LIKE '{tableName}'", conn);
+            var exists = await cmd.ExecuteScalarAsync();
+
+            if (exists == null)
+            {
+                result.IsValid = false;
+                result.MissingTables.Add(tableName);
+            }
+        }
+
+        if (!result.IsValid)
+        {
+            result.ErrorMessage = $"表 {string.Join(", ", result.MissingTables)} 不存在于数据库中";
+        }
+
+        return result;
     }
 
     private int? ExtractRowCount(string result)

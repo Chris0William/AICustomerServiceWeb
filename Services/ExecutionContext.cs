@@ -1,72 +1,81 @@
 using AICustomerServiceWeb.Models;
+using Microsoft.AspNetCore.Http;
 
 namespace AICustomerServiceWeb.Services;
 
 /// <summary>
-/// 简单的执行上下文，用于在工具和服务之间传递数据
+/// 执行上下文，使用HttpContext.Items存储请求级别的数据
 /// </summary>
-public static class ExecutionContext
+public class ExecutionContext
 {
-    private static string? _lastDatabaseExecution;
-    private static ExecutionDetails? _currentExecutionDetails;
-    private static readonly object _lock = new();
+    private readonly IHttpContextAccessor _httpContextAccessor;
+    private const string LastExecutionKey = "LastDatabaseExecution";
+    private const string ExecutionDetailsKey = "CurrentExecutionDetails";
 
-    public static string? LastDatabaseExecution
+    public ExecutionContext(IHttpContextAccessor httpContextAccessor)
+    {
+        _httpContextAccessor = httpContextAccessor;
+    }
+
+    public string? LastDatabaseExecution
     {
         get
         {
-            lock (_lock)
-            {
-                Console.WriteLine($"[ExecutionContext] Getting LastDatabaseExecution: {(_lastDatabaseExecution != null ? "Has Value" : "NULL")}");
-                return _lastDatabaseExecution;
-            }
+            var context = _httpContextAccessor.HttpContext;
+            if (context == null) return null;
+
+            var value = context.Items[LastExecutionKey] as string;
+            Console.WriteLine($"[ExecutionContext] Getting LastDatabaseExecution: {(value != null ? "Has Value" : "NULL")}");
+            return value;
         }
         set
         {
-            lock (_lock)
-            {
-                Console.WriteLine($"[ExecutionContext] Setting LastDatabaseExecution: {(value != null ? value.Length + " chars" : "NULL")}");
-                _lastDatabaseExecution = value;
-            }
+            var context = _httpContextAccessor.HttpContext;
+            if (context == null) return;
+
+            Console.WriteLine($"[ExecutionContext] Setting LastDatabaseExecution: {(value != null ? value.Length + " chars" : "NULL")}");
+            context.Items[LastExecutionKey] = value;
         }
     }
 
-    public static ExecutionDetails? CurrentExecutionDetails
+    public ExecutionDetails? CurrentExecutionDetails
     {
         get
         {
-            lock (_lock)
-            {
-                Console.WriteLine($"[ExecutionContext] Getting CurrentExecutionDetails: {(_currentExecutionDetails != null ? "Has Value" : "NULL")}");
-                if (_currentExecutionDetails != null)
-                {
-                    Console.WriteLine($"[ExecutionContext]   - RAGFlow steps: {_currentExecutionDetails.RAGFlowSteps.Count}");
-                }
-                return _currentExecutionDetails;
-            }
+            var context = _httpContextAccessor.HttpContext;
+            if (context == null) return null;
+
+            var value = context.Items[ExecutionDetailsKey] as ExecutionDetails;
+            // 注释掉频繁的日志输出，避免性能问题
+            // Console.WriteLine($"[ExecutionContext] Getting CurrentExecutionDetails: {(value != null ? "Has Value" : "NULL")}");
+            // if (value != null)
+            // {
+            //     Console.WriteLine($"[ExecutionContext]   - RAGFlow steps: {value.RAGFlowSteps.Count}");
+            // }
+            return value;
         }
         set
         {
-            lock (_lock)
+            var context = _httpContextAccessor.HttpContext;
+            if (context == null) return;
+
+            Console.WriteLine($"[ExecutionContext] Setting CurrentExecutionDetails: {(value != null ? "Has Value" : "NULL")}");
+            if (value != null)
             {
-                Console.WriteLine($"[ExecutionContext] Setting CurrentExecutionDetails: {(value != null ? "Has Value" : "NULL")}");
-                if (value != null)
-                {
-                    Console.WriteLine($"[ExecutionContext]   - RAGFlow steps: {value.RAGFlowSteps.Count}");
-                    Console.WriteLine($"[ExecutionContext]   - SQL: {value.GeneratedSQL?.Length ?? 0} chars");
-                }
-                _currentExecutionDetails = value;
+                Console.WriteLine($"[ExecutionContext]   - RAGFlow steps: {value.RAGFlowSteps.Count}");
+                Console.WriteLine($"[ExecutionContext]   - SQL: {value.GeneratedSQL?.Length ?? 0} chars");
             }
+            context.Items[ExecutionDetailsKey] = value;
         }
     }
 
-    public static void Clear()
+    public void Clear()
     {
-        lock (_lock)
-        {
-            Console.WriteLine("[ExecutionContext] Clear() called - clearing all data");
-            _lastDatabaseExecution = null;
-            _currentExecutionDetails = null;
-        }
+        var context = _httpContextAccessor.HttpContext;
+        if (context == null) return;
+
+        Console.WriteLine("[ExecutionContext] Clear() called - clearing all data");
+        context.Items.Remove(LastExecutionKey);
+        context.Items.Remove(ExecutionDetailsKey);
     }
 }

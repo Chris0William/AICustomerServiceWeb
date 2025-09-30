@@ -9,6 +9,9 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// 添加HttpContextAccessor以支持请求级别的数据存储
+builder.Services.AddHttpContextAccessor();
+
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
@@ -49,6 +52,12 @@ builder.Services.AddSingleton(sp =>
     return new ConversationService(aiConnectionString, maxContextMessages);
 });
 
+// 注册ExecutionContext为Scoped服务（每个请求一个实例）
+builder.Services.AddScoped<AICustomerServiceWeb.Services.ExecutionContext>();
+
+// 注册ToolCallTracker为Scoped服务（每个请求一个实例）
+builder.Services.AddScoped<AICustomerServiceWeb.Tools.ToolCallTracker>();
+
 builder.Services.AddScoped(sp =>
 {
     var kernelBuilder = Kernel.CreateBuilder();
@@ -61,8 +70,21 @@ builder.Services.AddScoped(sp =>
     var kernel = kernelBuilder.Build();
 
     var ragflow = sp.GetRequiredService<RAGFlowService>();
-    var dbTool = new DatabaseTool(productionConnectionString, kernel, ragflow);
-    kernel.Plugins.AddFromObject(dbTool, "DatabaseTool");
+    var executionContext = sp.GetRequiredService<AICustomerServiceWeb.Services.ExecutionContext>();
+    var tracker = sp.GetRequiredService<AICustomerServiceWeb.Tools.ToolCallTracker>();
+
+    // ReAct模式：注册独立的工具
+    // 1. RAGFlow知识库查询工具
+    var ragflowTool = new RAGFlowTool(ragflow, executionContext, tracker);
+    kernel.Plugins.AddFromObject(ragflowTool, "RAGFlowTool");
+
+    // 2. SQL生成和执行工具
+    var sqlTool = new SQLTool(productionConnectionString, executionContext, kernel, tracker);
+    kernel.Plugins.AddFromObject(sqlTool, "SQLTool");
+
+    // 3. 保留原有的DatabaseTool作为备用（可选）
+    // var dbTool = new DatabaseTool(productionConnectionString, kernel, ragflow, executionContext);
+    // kernel.Plugins.AddFromObject(dbTool, "DatabaseTool");
 
     return kernel;
 });
@@ -71,7 +93,8 @@ builder.Services.AddScoped(sp =>
 {
     var kernel = sp.GetRequiredService<Kernel>();
     var conversationService = sp.GetRequiredService<ConversationService>();
-    return new AIService(kernel, conversationService, systemPrompt, maxTokens, temperature);
+    var executionContext = sp.GetRequiredService<AICustomerServiceWeb.Services.ExecutionContext>();
+    return new AIService(kernel, conversationService, executionContext, systemPrompt, maxTokens, temperature);
 });
 
 var app = builder.Build();
