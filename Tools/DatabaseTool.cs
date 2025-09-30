@@ -192,19 +192,34 @@ public class DatabaseTool
             executionDetails.GeneratedSQL = sql;
             Console.WriteLine($"[DatabaseTool] Generated SQL: {sql}");
 
-            // 检查是否是ERROR
+            // 检查是否是ERROR - 如果失败，智能重试
             if (sql.StartsWith("ERROR:", StringComparison.OrdinalIgnoreCase))
             {
-                processLog.AppendLine("❌ LLM无法基于当前表结构生成SQL");
-                processLog.AppendLine($"原因: {sql}");
+                Console.WriteLine("[DatabaseTool] First SQL generation failed, attempting retry with enhanced hints...");
 
-                executionDetails.Status = "Failed";
-                executionDetails.ErrorMessage = sql;
-                executionDetails.TotalExecutionTime = (int)sw.ElapsedMilliseconds;
+                // 智能重试：增加特定领域的表提示
+                var enhancedPrompt = BuildEnhancedSQLPrompt(question, ddl);
+                sqlResponse = await _kernel.InvokePromptAsync(enhancedPrompt);
+                sql = ExtractSQL(sqlResponse.ToString());
 
-                _executionContext.LastDatabaseExecution = processLog.ToString();
-                _executionContext.CurrentExecutionDetails = executionDetails;
-                return "抱歉，当前数据库结构无法回答您的问题。可能的原因：\n1. 缺少相关的数据表或字段\n2. 字段命名不符合查询需求\n\n建议：\n- 请尝试更换问法或提供更具体的查询条件\n- 联系管理员检查数据库结构是否完整";
+                // 如果还是失败，记录并返回
+                if (sql.StartsWith("ERROR:", StringComparison.OrdinalIgnoreCase))
+                {
+                    processLog.AppendLine("❌ LLM无法基于当前表结构生成SQL");
+                    processLog.AppendLine($"原因: {sql}");
+
+                    executionDetails.Status = "Failed";
+                    executionDetails.ErrorMessage = sql;
+                    executionDetails.TotalExecutionTime = (int)sw.ElapsedMilliseconds;
+
+                    _executionContext.LastDatabaseExecution = processLog.ToString();
+                    _executionContext.CurrentExecutionDetails = executionDetails;
+                    return "抱歉，当前数据库结构无法回答您的问题。可能的原因：\n1. 缺少相关的数据表或字段\n2. 字段命名不符合查询需求\n\n建议：\n- 请尝试更换问法或提供更具体的查询条件\n- 联系管理员检查数据库结构是否完整";
+                }
+                else
+                {
+                    Console.WriteLine("[DatabaseTool] Retry successful! Generated SQL after hint enhancement.");
+                }
             }
 
             processLog.AppendLine("✅ SQL生成完成");
@@ -403,6 +418,7 @@ public class DatabaseTool
         prompt.AppendLine("7. 🔴 严禁编造或猜测不存在的表名和字段名");
         prompt.AppendLine("8. 🔴 优先参考业务规则文档理解数据模型和表之间的关联关系");
         prompt.AppendLine("9. 🔴 如果业务规则与DDL都提供了相关信息，以业务规则为准");
+        prompt.AppendLine();
         prompt.AppendLine("10. 如果实在无法生成SQL，返回：ERROR: 无法基于提供的表结构回答此问题");
         prompt.AppendLine();
         prompt.AppendLine("SQL：");
@@ -606,5 +622,39 @@ public class DatabaseTool
         }
 
         return null;
+    }
+
+    private string BuildEnhancedSQLPrompt(string question, string ddl)
+    {
+        var prompt = new StringBuilder();
+
+        prompt.AppendLine("你是一个SQL生成专家。第一次尝试失败了，请更仔细地理解用户的问题。");
+        prompt.AppendLine();
+
+        prompt.AppendLine("🔴 重要提示：");
+        prompt.AppendLine("1. 用户的问题可能使用了业务术语或领域特定的词汇");
+        prompt.AppendLine("2. 请仔细查看所有提供的表结构，寻找语义相关的表和字段");
+        prompt.AppendLine("3. 表名可能包含前缀（如dcm_、oms_、sys_等），代表不同的业务模块");
+        prompt.AppendLine("4. 字段名可能使用缩写或特定的命名规范（如V_开头表示文本，N_开头表示数值）");
+        prompt.AppendLine();
+
+        prompt.AppendLine("可用的表结构：");
+        prompt.AppendLine(ddl);
+        prompt.AppendLine();
+
+        prompt.AppendLine($"用户问题：{question}");
+        prompt.AppendLine();
+
+        prompt.AppendLine("请再次尝试生成SQL：");
+        prompt.AppendLine("1. 扩大搜索范围，查找所有可能相关的表");
+        prompt.AppendLine("2. 考虑同义词和相似概念");
+        prompt.AppendLine("3. 如果是关联查询，寻找可能的外键关系");
+        prompt.AppendLine("4. 注意 IsDeleted=0 筛选");
+        prompt.AppendLine("5. 只返回SQL语句，不要解释");
+        prompt.AppendLine("6. 如果确实找不到相关表，返回：ERROR: 无法基于提供的表结构回答此问题");
+        prompt.AppendLine();
+        prompt.AppendLine("SQL：");
+
+        return prompt.ToString();
     }
 }
