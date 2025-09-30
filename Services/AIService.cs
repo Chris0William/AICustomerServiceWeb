@@ -36,13 +36,19 @@ public class AIService
     {
         var chatHistory = new ChatHistory(_systemPrompt);
 
+        // 获取历史消息，但限制数量防止上下文过长
         var messages = await _conversationService.GetMessages(conversationId);
         foreach (var msg in messages)
         {
             if (msg.Role == "user")
+            {
                 chatHistory.AddUserMessage(msg.Content);
+            }
             else if (msg.Role == "assistant")
+            {
+                // 保留完整的历史消息，包括执行过程
                 chatHistory.AddAssistantMessage(msg.Content);
+            }
         }
 
         // ReAct模式：让AI自主决策，不再强制调用特定工具

@@ -30,13 +30,17 @@ public class ChatController : ControllerBase
 
             var conversationDetail = await _conversationService.GetConversationDetail(request.ConversationId);
 
+            // 获取消息的ExecutionDetails
+            var message = await _conversationService.GetMessageById(messageId);
+
             return Ok(new ChatResponse
             {
                 ConversationId = request.ConversationId,
                 Response = response,
                 TokenCount = tokenCount,
                 TotalTokens = conversationDetail?.TotalTokens ?? 0,
-                MessageId = messageId
+                MessageId = messageId,
+                ExecutionDetails = message?.ExecutionDetails
             });
         }
         catch (Exception ex)

@@ -23,6 +23,7 @@ public class ChatResponse
     public int TokenCount { get; set; }
     public int TotalTokens { get; set; }
     public long MessageId { get; set; }
+    public string? ExecutionDetails { get; set; }
 }
 
 public class ModelInfo

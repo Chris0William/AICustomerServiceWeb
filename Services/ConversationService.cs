@@ -151,4 +151,15 @@ public class ConversationService
 
         return conversation;
     }
+
+    public async Task<MessageDto?> GetMessageById(long messageId)
+    {
+        var sql = @"SELECT Id, Role, Content, ExecutionDetails, TokenCount, CreatedTime
+            FROM ai_message
+            WHERE Id = @Id";
+
+        using var conn = new MySqlConnection(_connectionString);
+        var message = await conn.QueryFirstOrDefaultAsync<MessageDto>(sql, new { Id = messageId });
+        return message;
+    }
 }

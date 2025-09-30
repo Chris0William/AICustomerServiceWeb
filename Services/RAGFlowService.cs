@@ -87,14 +87,17 @@ public class RAGFlowService
 
         try
         {
+            // 对于DDL查询，增加关键词权重，降低向量权重，因为表名需要精确匹配
+            var isDDLQuery = kbId == _ddlKbId;
             var requestBody = new
             {
                 question = query,
                 dataset_ids = new[] { kbId },
                 page = 1,
-                page_size = topK,
-                similarity_threshold = 0.2,
-                vector_similarity_weight = 0.3
+                page_size = isDDLQuery ? topK * 3 : topK, // DDL检索更多结果，后续筛选
+                similarity_threshold = isDDLQuery ? 0.1 : 0.2,
+                vector_similarity_weight = isDDLQuery ? 0.1 : 0.3, // DDL查询降低向量权重，提高关键词权重
+                keyword_similarity_weight = isDDLQuery ? 0.9 : 0.7 // 提高关键词权重
             };
 
             var content = new StringContent(

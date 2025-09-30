@@ -190,6 +190,7 @@ public class DatabaseTool
 
             // 记录生成的SQL
             executionDetails.GeneratedSQL = sql;
+            Console.WriteLine($"[DatabaseTool] Generated SQL: {sql}");
 
             // 检查是否是ERROR
             if (sql.StartsWith("ERROR:", StringComparison.OrdinalIgnoreCase))
@@ -253,8 +254,28 @@ public class DatabaseTool
                     var execStart = DateTime.Now;
                     result = await ExecuteSQL(sql);
                     var execTime = (int)(DateTime.Now - execStart).TotalMilliseconds;
+
+                    Console.WriteLine($"[DatabaseTool] SQL Execution Result (first 200 chars): {result.Substring(0, Math.Min(200, result.Length))}");
+                    Console.WriteLine($"[DatabaseTool] Full result length: {result.Length} chars");
+
                     processLog.AppendLine("✅ 查询执行成功");
                     processLog.AppendLine();
+
+                    // 特殊处理COUNT查询结果，使其更明确
+                    if (sql.ToUpper().Contains("COUNT("))
+                    {
+                        var countValue = ExtractCountValue(result);
+                        if (countValue != null)
+                        {
+                            processLog.AppendLine($"**查询结果**: 共 {countValue} 条记录");
+                            processLog.AppendLine();
+                            processLog.AppendLine("详细结果表格：");
+                            processLog.AppendLine(result);
+
+                            // 为了让LLM更清楚地理解，在结果后面添加明确的说明
+                            result = $"查询结果：共 {countValue} 条记录\n\n{result}\n\n说明：COUNT(*)的值为 {countValue}，表示表中有 {countValue} 条记录。";
+                        }
+                    }
 
                     // 记录执行成功
                     executionDetails.Status = "Success";
@@ -552,6 +573,38 @@ public class DatabaseTool
             }
             return count > 0 ? count : null;
         }
+        return null;
+    }
+
+    private int? ExtractCountValue(string result)
+    {
+        // Extract the actual COUNT value from a COUNT(*) query result
+        var lines = result.Split('\n');
+        bool foundHeader = false;
+
+        foreach (var line in lines)
+        {
+            if (line.Contains("COUNT("))
+            {
+                foundHeader = true;
+                continue;
+            }
+
+            if (foundHeader && line.StartsWith("|") && !line.Contains("---"))
+            {
+                // This should be the data row
+                var parts = line.Split('|');
+                foreach (var part in parts)
+                {
+                    var trimmed = part.Trim();
+                    if (!string.IsNullOrEmpty(trimmed) && int.TryParse(trimmed, out int count))
+                    {
+                        return count;
+                    }
+                }
+            }
+        }
+
         return null;
     }
 }
