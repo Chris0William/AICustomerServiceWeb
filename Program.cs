@@ -42,11 +42,15 @@ var maxTokens = config.GetValue<int>("AISettings:MaxTokensPerRequest");
 var temperature = config.GetValue<double>("AISettings:Temperature");
 var systemPrompt = config["AISettings:SystemPrompt"]!;
 
+// === 基础服务注册 ===
+
+// RAGFlow服务
 builder.Services.AddSingleton(sp =>
 {
     return new RAGFlowService(ragflowApiKey, ragflowEndpoint, q2sqlKbId, ddlKbId, businessRulesKbId);
 });
 
+// 会话服务
 builder.Services.AddSingleton(sp =>
 {
     return new ConversationService(aiConnectionString, maxContextMessages);
@@ -57,6 +61,32 @@ builder.Services.AddScoped<AICustomerServiceWeb.Services.ExecutionContext>();
 
 // 注册ToolCallTracker为Scoped服务（每个请求一个实例）
 builder.Services.AddScoped<AICustomerServiceWeb.Tools.ToolCallTracker>();
+
+// === 已删除复杂的Agent架构，使用简化版服务 ===
+
+// === 简化版服务（推荐使用） ===
+
+// 注册SimpleAgentService - 专注于准确执行和清晰响应
+builder.Services.AddScoped<SimpleAgentService>(sp =>
+{
+    var kernelBuilder = Kernel.CreateBuilder();
+
+#pragma warning disable SKEXP0010
+    kernelBuilder.AddOpenAIChatCompletion(
+        modelId: "qwen-plus",
+        endpoint: new Uri(dashScopeEndpoint),
+        apiKey: dashScopeApiKey);
+#pragma warning restore SKEXP0010
+
+    var kernel = kernelBuilder.Build();
+    var ragflow = sp.GetRequiredService<RAGFlowService>();
+    var conversationService = sp.GetRequiredService<ConversationService>();
+    var logger = sp.GetRequiredService<ILogger<SimpleAgentService>>();
+
+    return new SimpleAgentService(kernel, ragflow, conversationService, config, logger);
+});
+
+// === 保留原有服务（向后兼容） ===
 
 builder.Services.AddScoped(sp =>
 {

@@ -33,7 +33,7 @@ public class ChatController : ControllerBase
             // 获取消息的ExecutionDetails
             var message = await _conversationService.GetMessageById(messageId);
 
-            return Ok(new ChatResponse
+            return Ok(new Models.Dto.ChatResponse
             {
                 ConversationId = request.ConversationId,
                 Response = response,
