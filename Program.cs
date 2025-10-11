@@ -1,17 +1,20 @@
+using AICustomerServiceWeb2.Core.Agent;
+using AICustomerServiceWeb2.Core.Tools;
+using AICustomerServiceWeb2.Application.Services;
+using AICustomerServiceWeb2.Infrastructure.Tools;
 using Microsoft.SemanticKernel;
-using Microsoft.Extensions.AI;
-using AICustomerServiceWeb.Services;
-using AICustomerServiceWeb.Tools;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
+// 添加控制器
+builder.Services.AddControllers()
+    .AddNewtonsoftJson(); // 使用Newtonsoft.Json
+
+// Swagger/OpenAPI
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// 添加HttpContextAccessor以支持请求级别的数据存储
-builder.Services.AddHttpContextAccessor();
-
+// CORS（允许前端访问）
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
@@ -22,120 +25,63 @@ builder.Services.AddCors(options =>
     });
 });
 
-var config = builder.Configuration;
+// Semantic Kernel配置
+var apiKey = builder.Configuration["DashScope:ApiKey"] ?? "";
+var endpoint = builder.Configuration["DashScope:Endpoint"] ?? "https://dashscope.aliyuncs.com/compatible-mode/v1";
+var model = builder.Configuration["DashScope:DefaultModel"] ?? "qwen-plus";
 
-var dashScopeApiKey = config["DashScope:ApiKey"]!;
-var dashScopeEndpoint = config["DashScope:Endpoint"]!;
-var defaultModel = config["DashScope:DefaultModel"]!;
+var kernelBuilder = Kernel.CreateBuilder();
+kernelBuilder.AddOpenAIChatCompletion(
+    modelId: model,
+    apiKey: apiKey,
+    endpoint: new Uri(endpoint)
+);
 
-var ragflowApiKey = config["RAGFlow:ApiKey"]!;
-var ragflowEndpoint = config["RAGFlow:Endpoint"]!;
-var q2sqlKbId = config["RAGFlow:Q2SQLKbId"]!;
-var ddlKbId = config["RAGFlow:DDLKbId"]!;
-var businessRulesKbId = config["RAGFlow:BusinessRulesKbId"]!;
+builder.Services.AddSingleton(kernelBuilder.Build());
 
-var aiConnectionString = config.GetConnectionString("AICustomerService")!;
-var productionConnectionString = config.GetConnectionString("Production")!;
+// 注册Agent组件
+builder.Services.AddScoped<IPlanner, Planner>();
+builder.Services.AddScoped<IExecutor, Executor>();
+builder.Services.AddScoped<IReflector, Reflector>();
+builder.Services.AddScoped<IReActAgent, ReActAgent>();
 
-var maxContextMessages = config.GetValue<int>("AISettings:MaxContextMessages");
-var maxTokens = config.GetValue<int>("AISettings:MaxTokensPerRequest");
-var temperature = config.GetValue<double>("AISettings:Temperature");
-var systemPrompt = config["AISettings:SystemPrompt"]!;
+// 注册工具
+builder.Services.AddScoped<IAgentTool, DatabaseTool>();
 
-// === 基础服务注册 ===
-
-// RAGFlow服务
-builder.Services.AddSingleton(sp =>
-{
-    return new RAGFlowService(ragflowApiKey, ragflowEndpoint, q2sqlKbId, ddlKbId, businessRulesKbId);
-});
-
-// 会话服务
-builder.Services.AddSingleton(sp =>
-{
-    return new ConversationService(aiConnectionString, maxContextMessages);
-});
-
-// 注册ExecutionContext为Scoped服务（每个请求一个实例）
-builder.Services.AddScoped<AICustomerServiceWeb.Services.ExecutionContext>();
-
-// 注册ToolCallTracker为Scoped服务（每个请求一个实例）
-builder.Services.AddScoped<AICustomerServiceWeb.Tools.ToolCallTracker>();
-
-// === 已删除复杂的Agent架构，使用简化版服务 ===
-
-// === 简化版服务（推荐使用） ===
-
-// 注册SimpleAgentService - 专注于准确执行和清晰响应
-builder.Services.AddScoped<SimpleAgentService>(sp =>
-{
-    var kernelBuilder = Kernel.CreateBuilder();
-
-#pragma warning disable SKEXP0010
-    kernelBuilder.AddOpenAIChatCompletion(
-        modelId: "qwen-plus",
-        endpoint: new Uri(dashScopeEndpoint),
-        apiKey: dashScopeApiKey);
-#pragma warning restore SKEXP0010
-
-    var kernel = kernelBuilder.Build();
-    var ragflow = sp.GetRequiredService<RAGFlowService>();
-    var conversationService = sp.GetRequiredService<ConversationService>();
-    var logger = sp.GetRequiredService<ILogger<SimpleAgentService>>();
-
-    return new SimpleAgentService(kernel, ragflow, conversationService, config, logger);
-});
-
-// === 保留原有服务（向后兼容） ===
-
-builder.Services.AddScoped(sp =>
-{
-    var kernelBuilder = Kernel.CreateBuilder();
-
-#pragma warning disable SKEXP0010 // 抑制实验性API警告
-    kernelBuilder.AddOpenAIChatCompletion(
-        modelId: defaultModel,
-        endpoint: new Uri(dashScopeEndpoint),
-        apiKey: dashScopeApiKey);
-#pragma warning restore SKEXP0010
-
-    var kernel = kernelBuilder.Build();
-
-    var ragflow = sp.GetRequiredService<RAGFlowService>();
-    var executionContext = sp.GetRequiredService<AICustomerServiceWeb.Services.ExecutionContext>();
-    var tracker = sp.GetRequiredService<AICustomerServiceWeb.Tools.ToolCallTracker>();
-
-    // 使用DatabaseTool模式（性能更优）
-    var dbTool = new DatabaseTool(productionConnectionString, kernel, ragflow, executionContext);
-    kernel.Plugins.AddFromObject(dbTool, "DatabaseTool");
-
-    // ReAct模式工具（暂时禁用）
-    // var ragflowTool = new RAGFlowTool(ragflow, executionContext, tracker);
-    // kernel.Plugins.AddFromObject(ragflowTool, "RAGFlowTool");
-    // var sqlTool = new SQLTool(productionConnectionString, executionContext, kernel, tracker);
-    // kernel.Plugins.AddFromObject(sqlTool, "SQLTool");
-
-    return kernel;
-});
-
-builder.Services.AddScoped(sp =>
-{
-    var kernel = sp.GetRequiredService<Kernel>();
-    var conversationService = sp.GetRequiredService<ConversationService>();
-    var executionContext = sp.GetRequiredService<AICustomerServiceWeb.Services.ExecutionContext>();
-    return new AIService(kernel, conversationService, executionContext, systemPrompt, maxTokens, temperature);
-});
+// 日志配置
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
+builder.Logging.SetMinimumLevel(LogLevel.Information);
 
 var app = builder.Build();
 
-app.UseSwagger();
-app.UseSwaggerUI();
+// 配置HTTP请求管道
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+
+// 静态文件支持
+app.UseStaticFiles();
+
+app.UseHttpsRedirection();
 
 app.UseCors();
 
-app.UseDefaultFiles();
-app.UseStaticFiles();
+app.UseAuthorization();
 
 app.MapControllers();
+
+// 默认路由到静态页面
+app.MapFallbackToFile("index.html");
+
+Console.WriteLine("=================================================");
+Console.WriteLine("AICustomerServiceWeb2 - ReAct Agent 启动成功");
+Console.WriteLine("=================================================");
+Console.WriteLine($"API地址: {app.Urls.FirstOrDefault()}");
+Console.WriteLine($"Swagger文档: {app.Urls.FirstOrDefault()}/swagger");
+Console.WriteLine($"使用模型: {model}");
+Console.WriteLine("=================================================");
 
 app.Run();

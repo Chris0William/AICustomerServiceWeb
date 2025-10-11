@@ -3,86 +3,367 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI智能客服 - 内部测试版</title>
-    <link rel="stylesheet" href="/css/style.css">
+    <title>AI Customer Service - ReAct Agent</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .container {
+            width: 90%;
+            max-width: 1200px;
+            height: 90vh;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 20px 20px 0 0;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .header p {
+            font-size: 14px;
+            opacity: 0.9;
+            margin-top: 5px;
+        }
+
+        .chat-area {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background: #f8f9fa;
+        }
+
+        .message {
+            margin-bottom: 20px;
+            display: flex;
+            align-items: flex-start;
+        }
+
+        .message.user {
+            flex-direction: row-reverse;
+        }
+
+        .message-content {
+            max-width: 70%;
+            padding: 15px 20px;
+            border-radius: 15px;
+            line-height: 1.6;
+        }
+
+        .message.user .message-content {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 15px 15px 0 15px;
+        }
+
+        .message.assistant .message-content {
+            background: white;
+            color: #333;
+            border: 1px solid #e0e0e0;
+            border-radius: 15px 15px 15px 0;
+        }
+
+        .state-indicator {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 10px 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-size: 14px;
+            color: #1976d2;
+        }
+
+        .step-output {
+            background: #f5f5f5;
+            border-left: 4px solid #4caf50;
+            padding: 10px 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .step-output.failed {
+            border-left-color: #f44336;
+            background: #ffebee;
+        }
+
+        .input-area {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #e0e0e0;
+            border-radius: 0 0 20px 20px;
+        }
+
+        .input-container {
+            display: flex;
+            gap: 10px;
+        }
+
+        #messageInput {
+            flex: 1;
+            padding: 15px 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 25px;
+            font-size: 14px;
+            outline: none;
+            transition: all 0.3s;
+        }
+
+        #messageInput:focus {
+            border-color: #667eea;
+        }
+
+        #sendButton {
+            padding: 15px 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        #sendButton:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        #sendButton:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .typing-indicator {
+            display: none;
+            padding: 10px;
+            font-style: italic;
+            color: #999;
+        }
+
+        .typing-indicator.show {
+            display: block;
+        }
+
+        pre {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+            margin: 10px 0;
+        }
+
+        code {
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
-        <div class="sidebar">
-            <div class="sidebar-header">
-                <h2>AI智能客服</h2>
-                <button id="newConversationBtn" class="btn-primary">+ 新建会话</button>
-            </div>
-            <div class="conversation-list" id="conversationList">
-                <div class="loading">加载中...</div>
-            </div>
+        <div class="header">
+            <h1>🤖 AI Customer Service</h1>
+            <p>基于 ReAct Agent 架构 - 智能规划·执行·反思</p>
         </div>
 
-        <div class="main-content">
-            <div class="chat-header">
-                <div class="chat-title" id="chatTitle">请选择或创建会话</div>
-                <div class="chat-info">
-                    <span id="modelInfo"></span>
-                    <span id="tokenInfo" class="token-badge"></span>
-                    <button id="exportBtn" class="btn-secondary" style="display:none;">导出对话</button>
-                </div>
-            </div>
-
-            <div class="chat-messages" id="chatMessages">
-                <div class="welcome-message">
-                    <h3>👋 欢迎使用AI智能客服测试系统</h3>
-                    <p>这是一个内部测试版本，用于评估AI模型能力和上下文处理极限。</p>
-                    <p>功能特性：</p>
+        <div class="chat-area" id="chatArea">
+            <div class="message assistant">
+                <div class="message-content">
+                    <p>您好！我是基于 <strong>ReAct Agent</strong> 架构的智能客服助手。</p>
+                    <p>我可以帮您查询数据库信息、回答问题等。我会：</p>
                     <ul>
-                        <li>✅ 数据库查询（Text2SQL）</li>
-                        <li>✅ 知识库检索（RAGFlow）</li>
-                        <li>✅ 多轮对话上下文理解</li>
-                        <li>✅ 自动工具选择</li>
+                        <li>📋 <strong>规划</strong>：分析您的请求，制定执行计划</li>
+                        <li>⚙️ <strong>执行</strong>：调用工具完成任务</li>
+                        <li>🤔 <strong>反思</strong>：评估结果，必要时调整计划重试</li>
                     </ul>
-                    <p>请点击左上角"新建会话"开始测试。</p>
-                </div>
-            </div>
-
-            <div class="chat-input-container">
-                <textarea
-                    id="userInput"
-                    placeholder="输入您的问题...（Shift+Enter换行，Enter发送）"
-                    rows="1"
-                    disabled></textarea>
-                <button id="sendBtn" class="btn-send" disabled>发送</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="modelModal" class="modal">
-        <div class="modal-content">
-            <h3>选择模型</h3>
-            <div id="modelOptions" class="model-options">
-                <div class="loading">加载模型列表...</div>
-            </div>
-            <div class="modal-actions">
-                <button id="cancelModelBtn" class="btn-secondary">取消</button>
-                <button id="confirmModelBtn" class="btn-primary" disabled>确认</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- 任务日志详情弹窗 -->
-    <div id="logModal" class="log-modal">
-        <div class="log-modal-content">
-            <div class="log-modal-header">
-                <h3>🔍 任务执行详情</h3>
-                <button class="log-modal-close" onclick="closeLogModal()">&times;</button>
-            </div>
-            <div class="log-modal-body" id="logModalBody">
-                <div class="loading-logs">
-                    <div class="spinner"></div>
-                    <p>加载中...</p>
+                    <p>请问有什么可以帮您？</p>
                 </div>
             </div>
         </div>
+
+        <div class="input-area">
+            <div class="typing-indicator" id="typingIndicator">AI正在思考中...</div>
+            <div class="input-container">
+                <input
+                    type="text"
+                    id="messageInput"
+                    placeholder="输入您的问题..."
+                    onkeypress="if(event.key==='Enter') sendMessage()"
+                >
+                <button id="sendButton" onclick="sendMessage()">发送</button>
+            </div>
+        </div>
     </div>
 
-    <script src="/js/app.js"></script>
+    <script>
+        let currentMessageDiv = null;
+        let isProcessing = false;
+
+        function addMessage(content, role) {
+            const chatArea = document.getElementById('chatArea');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}`;
+
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.innerHTML = content;
+
+            messageDiv.appendChild(contentDiv);
+            chatArea.appendChild(messageDiv);
+            chatArea.scrollTop = chatArea.scrollHeight;
+
+            return contentDiv;
+        }
+
+        function addStateIndicator(message) {
+            const chatArea = document.getElementById('chatArea');
+            const stateDiv = document.createElement('div');
+            stateDiv.className = 'state-indicator';
+            stateDiv.textContent = message;
+            chatArea.appendChild(stateDiv);
+            chatArea.scrollTop = chatArea.scrollHeight;
+            return stateDiv;
+        }
+
+        function addStepOutput(stepNumber, toolName, success, output) {
+            const chatArea = document.getElementById('chatArea');
+            const stepDiv = document.createElement('div');
+            stepDiv.className = `step-output ${success ? '' : 'failed'}`;
+            stepDiv.innerHTML = `
+                <strong>步骤 ${stepNumber} (${toolName})</strong> ${success ? '✅' : '❌'}<br>
+                ${output}
+            `;
+            chatArea.appendChild(stepDiv);
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+
+            if (!message || isProcessing) return;
+
+            // 添加用户消息
+            addMessage(message, 'user');
+            input.value = '';
+
+            // 显示加载状态
+            isProcessing = true;
+            document.getElementById('sendButton').disabled = true;
+            document.getElementById('typingIndicator').classList.add('show');
+
+            // 创建助手消息容器
+            currentMessageDiv = null;
+
+            try {
+                const response = await fetch('/api/agent/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        conversationId: 'test-conversation',
+                        modelId: 'qwen-plus'
+                    })
+                });
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+
+                while (true) {
+                    const {done, value} = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = line.slice(6).trim();
+                            if (!data) continue;
+
+                            try {
+                                const json = JSON.parse(data);
+                                handleSSEMessage(json);
+                            } catch (e) {
+                                console.error('解析SSE消息失败:', e, data);
+                            }
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('请求失败:', error);
+                addMessage(`❌ 错误：${error.message}`, 'assistant');
+            } finally {
+                isProcessing = false;
+                document.getElementById('sendButton').disabled = false;
+                document.getElementById('typingIndicator').classList.remove('show');
+            }
+        }
+
+        function handleSSEMessage(msg) {
+            console.log('收到SSE消息:', msg);
+
+            switch (msg.type) {
+                case 'state':
+                    addStateIndicator(`🔄 ${msg.data.message}`);
+                    break;
+
+                case 'step':
+                    addStepOutput(
+                        msg.data.stepNumber,
+                        msg.data.toolName,
+                        msg.data.success,
+                        msg.data.output
+                    );
+                    break;
+
+                case 'reflection':
+                    addStateIndicator(`🤔 反思分析：${msg.data.analysis} (置信度: ${msg.data.confidenceScore}%)`);
+                    break;
+
+                case 'answer':
+                    if (!currentMessageDiv) {
+                        currentMessageDiv = addMessage('', 'assistant');
+                    }
+                    currentMessageDiv.innerHTML = msg.data.replace(/\n/g, '<br>');
+                    break;
+
+                case 'done':
+                    console.log('处理完成:', msg.data);
+                    break;
+
+                case 'error':
+                    addMessage(`❌ 错误：${msg.data.message}`, 'assistant');
+                    break;
+            }
+        }
+    </script>
 </body>
 </html>
