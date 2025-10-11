@@ -143,6 +143,10 @@ public class Reflector : IReflector
         sb.AppendLine("3. improvements: 提出具体的改进建议");
         sb.AppendLine($"4. confidenceScore: 0-100的置信度评分（>={MIN_CONFIDENCE_SCORE}表示成功）");
         sb.AppendLine("5. 只输出JSON，不要包含其他解释性文字");
+        sb.AppendLine();
+        sb.AppendLine("**特别说明：**");
+        sb.AppendLine("- 对于会话型请求（如问候、闲聊），0个步骤是正常的，应给予高置信度分数");
+        sb.AppendLine("- 对于数据库查询请求，必须有步骤执行并返回数据才算成功");
 
         return sb.ToString();
     }

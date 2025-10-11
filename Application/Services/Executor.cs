@@ -77,19 +77,29 @@ public class Executor : IExecutor
 
             stopwatch.Stop();
 
-            // 判断整体是否成功（至少有一个步骤成功）
-            var hasSuccess = result.StepOutputs.Any(s => s.Success);
-            result.Success = hasSuccess;
+            // 判断整体是否成功
+            // - 如果计划本身没有步骤,视为成功(会话型查询无需工具调用)
+            // - 如果有步骤,至少要有一个步骤成功
+            if (plan.Steps.Count == 0)
+            {
+                result.Success = true;
+                _logger.LogInformation("[Executor] 计划无需执行任何步骤,标记为成功(会话型请求)");
+            }
+            else
+            {
+                var hasSuccess = result.StepOutputs.Any(s => s.Success);
+                result.Success = hasSuccess;
+                if (!result.Success)
+                {
+                    result.ErrorMessage = "所有步骤执行失败";
+                }
+            }
+
             result.ExecutionTimeMs = stopwatch.ElapsedMilliseconds;
             result.EndTime = DateTime.Now;
 
             // 生成最终输出
             result.FinalOutput = GenerateFinalOutput(result.StepOutputs);
-
-            if (!result.Success)
-            {
-                result.ErrorMessage = "所有步骤执行失败";
-            }
 
             _logger.LogInformation($"[Executor] 计划执行完成，总耗时 {result.ExecutionTimeMs}ms");
 
@@ -224,7 +234,8 @@ public class Executor : IExecutor
     {
         if (!stepOutputs.Any())
         {
-            return "未执行任何步骤";
+            // 0 步骤的计划(会话型请求),返回空字符串让 ReActAgent 生成最终回复
+            return string.Empty;
         }
 
         var successfulSteps = stepOutputs.Where(s => s.Success).ToList();

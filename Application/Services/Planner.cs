@@ -190,23 +190,58 @@ public class Planner : IPlanner
 
             var plan = new ExecutionPlan
             {
-                RequestAnalysis = planData.requestAnalysis ?? "",
-                ExpectedOutcome = planData.expectedOutcome ?? ""
+                RequestAnalysis = planData.requestAnalysis ?? planData.RequestAnalysis ?? "",
+                ExpectedOutcome = planData.expectedOutcome ?? planData.ExpectedOutcome ?? ""
             };
 
-            foreach (var step in planData.steps)
+            // 兼容小写 steps 和大写 Steps
+            var stepsArray = planData.steps ?? planData.Steps;
+
+            if (stepsArray == null)
             {
+                _logger.LogInformation("[Planner] 计划不包含任何步骤，返回空计划");
+                return plan;
+            }
+
+            foreach (var step in stepsArray)
+            {
+                // 兼容不同的字段命名格式
+                int stepNumber;
+                if (step.stepNumber != null)
+                    stepNumber = (int)step.stepNumber;
+                else if (step.StepNumber != null)
+                    stepNumber = (int)step.StepNumber;
+                else if (step.StepId != null)
+                    stepNumber = (int)step.StepId;
+                else
+                    stepNumber = plan.Steps.Count + 1;
+
+                string description = step.description ?? step.Description ?? "";
+                string toolName = step.toolName ?? step.ToolName ?? step.Action ?? "";
+
+                // toolParameters 可能是对象或字符串
+                string toolParameters = "{}";
+                var parameters = step.toolParameters ?? step.ToolParameters ?? step.Parameters;
+                if (parameters != null)
+                {
+                    if (parameters is string)
+                        toolParameters = parameters;
+                    else
+                        toolParameters = JsonConvert.SerializeObject(parameters);
+                }
+
                 var executionStep = new ExecutionStep
                 {
-                    StepNumber = step.stepNumber,
-                    Description = step.description ?? "",
-                    ToolName = step.toolName ?? "",
-                    ToolParameters = step.toolParameters?.ToString() ?? "{}",
+                    StepNumber = stepNumber,
+                    Description = description,
+                    ToolName = toolName,
+                    ToolParameters = toolParameters,
                 };
 
-                if (step.dependencies != null)
+                var dependencies = step.dependencies ?? step.Dependencies;
+                if (dependencies != null)
                 {
-                    foreach (var dep in step.dependencies)
+                    foreach (var dep in dependencies)
                     {
                         executionStep.Dependencies.Add((int)dep);
                     }

@@ -5,6 +5,8 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AICustomerServiceWeb", "AICustomerServiceWeb.csproj", "{35C998D8-4F5F-4EE8-BD5C-45D0577F0349}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AICustomerServiceWeb.Console", "..\AICustomerServiceWeb.Console\AICustomerServiceWeb.Console.csproj", "{CB4A2742-DE34-C7CC-E02A-2AE685A5B514}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +29,18 @@ Global
 		{35C998D8-4F5F-4EE8-BD5C-45D0577F0349}.Release|x64.Build.0 = Release|Any CPU
 		{35C998D8-4F5F-4EE8-BD5C-45D0577F0349}.Release|x86.ActiveCfg = Release|Any CPU
 		{35C998D8-4F5F-4EE8-BD5C-45D0577F0349}.Release|x86.Build.0 = Release|Any CPU
+		{CB4A2742-DE34-C7CC-E02A-2AE685A5B514}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CB4A2742-DE34-C7CC-E02A-2AE685A5B514}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CB4A2742-DE34-C7CC-E02A-2AE685A5B514}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{CB4A2742-DE34-C7CC-E02A-2AE685A5B514}.Debug|x64.Build.0 = Debug|Any CPU
+		{CB4A2742-DE34-C7CC-E02A-2AE685A5B514}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{CB4A2742-DE34-C7CC-E02A-2AE685A5B514}.Debug|x86.Build.0 = Debug|Any CPU
+		{CB4A2742-DE34-C7CC-E02A-2AE685A5B514}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CB4A2742-DE34-C7CC-E02A-2AE685A5B514}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CB4A2742-DE34-C7CC-E02A-2AE685A5B514}.Release|x64.ActiveCfg = Release|Any CPU
+		{CB4A2742-DE34-C7CC-E02A-2AE685A5B514}.Release|x64.Build.0 = Release|Any CPU
+		{CB4A2742-DE34-C7CC-E02A-2AE685A5B514}.Release|x86.ActiveCfg = Release|Any CPU
+		{CB4A2742-DE34-C7CC-E02A-2AE685A5B514}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

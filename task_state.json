@@ -1,0 +1,261 @@
+{
+  "project": "AICustomerServiceWeb - ReAct Agent",
+  "version": "2.0.0-dev",
+  "last_updated": "2025-10-11T00:30:00Z",
+  "current_phase": "Phase 1 - MVP Implementation",
+  "overall_progress": 17,
+  "current_iteration": 1,
+
+  "functional_requirements": {
+    "core_capabilities": [
+      "Agent 反思机制 (Reflection) - 评估执行结果质量",
+      "任务规划期 (Planning) - 自动拆解复杂请求为多步骤",
+      "子 Agent 控制 - 多个专门Agent协作",
+      "上下文持久记忆 (Context Memory) - 对话历史保存和检索",
+      "自检与重构能力 - 发现错误时自动修正",
+      "知识库检索 (RAGFlow) - Q2SQL、DDL、BusinessRules",
+      "数据库查询 (MySQL) - 真实业务数据查询"
+    ]
+  },
+
+  "phases": [
+    {
+      "name": "Phase 1 - MVP Implementation",
+      "status": "in_progress",
+      "priority": "critical",
+      "progress": 17,
+      "tasks": [
+        {
+          "id": "1.1",
+          "name": "实现 RAGFlowService",
+          "status": "completed",
+          "priority": "critical",
+          "description": "HTTP客户端调用RAGFlow API，支持三个知识库检索",
+          "acceptance_criteria": [
+            "✅ 成功调用 RAGFlow API",
+            "✅ 支持 Q2SQL、DDL、BusinessRules 三个知识库",
+            "✅ 返回相似度排序的结果",
+            "✅ 包含错误处理和重试机制"
+          ],
+          "estimated_hours": 2,
+          "actual_hours": 0.5,
+          "completed_at": "2025-10-11T00:30:00Z",
+          "files_created": [
+            "Application/Services/RAGFlowService.cs",
+            "Core/Interfaces/IRAGFlowService.cs",
+            "Core/Models/RAGFlowModels.cs"
+          ]
+        },
+        {
+          "id": "1.2",
+          "name": "实现 DatabaseService",
+          "status": "in_progress",
+          "priority": "critical",
+          "description": "MySQL连接管理，SQL执行和结果解析",
+          "acceptance_criteria": [
+            "建立 MySQL 连接池",
+            "执行 SQL 并返回结果",
+            "支持事务管理",
+            "错误处理和超时控制"
+          ],
+          "estimated_hours": 2,
+          "actual_hours": 0,
+          "files_to_create": [
+            "Application/Services/DatabaseService.cs",
+            "Core/Interfaces/IDatabaseService.cs",
+            "Core/Models/DatabaseModels.cs"
+          ]
+        },
+        {
+          "id": "1.3",
+          "name": "实现 ConversationService",
+          "status": "pending",
+          "priority": "high",
+          "description": "对话历史管理，保存和加载上下文",
+          "acceptance_criteria": [
+            "保存对话到数据库",
+            "加载历史对话",
+            "管理 ConversationId",
+            "支持 ExecutionDetails 存储"
+          ],
+          "estimated_hours": 1.5,
+          "actual_hours": 0,
+          "files_to_create": [
+            "Application/Services/ConversationService.cs",
+            "Core/Interfaces/IConversationService.cs",
+            "Core/Models/ConversationModels.cs"
+          ]
+        },
+        {
+          "id": "1.4",
+          "name": "重写 DatabaseTool (完整实现)",
+          "status": "pending",
+          "priority": "critical",
+          "description": "集成 RAGFlowService 和 DatabaseService，实现完整查询流程",
+          "acceptance_criteria": [
+            "RAGFlow 检索 Q2SQL 示例",
+            "RAGFlow 检索 DDL 结构",
+            "RAGFlow 检索业务规则",
+            "LLM 生成 SQL",
+            "验证 SQL 语法和表存在性",
+            "执行 SQL 并格式化结果",
+            "记录 ExecutionDetails"
+          ],
+          "estimated_hours": 3,
+          "actual_hours": 0,
+          "depends_on": ["1.1", "1.2"],
+          "files_to_modify": [
+            "Infrastructure/Tools/DatabaseTool.cs"
+          ]
+        },
+        {
+          "id": "1.5",
+          "name": "更新 Program.cs 服务注册",
+          "status": "pending",
+          "priority": "critical",
+          "description": "注册所有新服务到 DI 容器",
+          "acceptance_criteria": [
+            "注册 RAGFlowService",
+            "注册 DatabaseService",
+            "注册 ConversationService",
+            "配置 HttpClient",
+            "配置数据库连接"
+          ],
+          "estimated_hours": 0.5,
+          "actual_hours": 0,
+          "depends_on": ["1.1", "1.2", "1.3"],
+          "files_to_modify": [
+            "Program.cs"
+          ]
+        },
+        {
+          "id": "1.6",
+          "name": "控制台测试验证",
+          "status": "pending",
+          "priority": "critical",
+          "description": "使用控制台项目执行测试用例",
+          "acceptance_criteria": [
+            "执行测试用例.md 中的 Category 1-3",
+            "验证 SQL 生成正确性",
+            "验证真实数据查询成功",
+            "验证 ReAct 流程完整性"
+          ],
+          "estimated_hours": 1,
+          "actual_hours": 0,
+          "depends_on": ["1.4", "1.5"],
+          "test_cases": [
+            "查询所有用户信息",
+            "查询所有停用的用户",
+            "查询所有超级管理员"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Phase 2 - Agent Enhancement",
+      "status": "pending",
+      "priority": "high",
+      "progress": 0,
+      "tasks": [
+        {
+          "id": "2.1",
+          "name": "增强 Planner - 复杂任务拆解",
+          "status": "pending",
+          "priority": "high",
+          "description": "支持更复杂的任务拆解，并行步骤，条件分支"
+        },
+        {
+          "id": "2.2",
+          "name": "增强 Reflector - 多维度评估",
+          "status": "pending",
+          "priority": "high",
+          "description": "准确性、完整性、时效性多维度评估"
+        },
+        {
+          "id": "2.3",
+          "name": "实现 Self-Healing 机制",
+          "status": "pending",
+          "priority": "high",
+          "description": "SQL错误自动修复，工具调用超时重试"
+        },
+        {
+          "id": "2.4",
+          "name": "完善 ConversationService",
+          "status": "pending",
+          "priority": "medium",
+          "description": "上下文压缩，记忆检索优化"
+        }
+      ]
+    },
+    {
+      "name": "Phase 3 - Sub-Agent System",
+      "status": "pending",
+      "priority": "medium",
+      "progress": 0,
+      "tasks": [
+        {
+          "id": "3.1",
+          "name": "定义 ISubAgent 接口",
+          "status": "pending",
+          "priority": "medium",
+          "description": "子Agent的标准接口"
+        },
+        {
+          "id": "3.2",
+          "name": "实现 DatabaseAgent",
+          "status": "pending",
+          "priority": "medium",
+          "description": "专门处理数据库查询的子Agent"
+        },
+        {
+          "id": "3.3",
+          "name": "实现 AgentRegistry",
+          "status": "pending",
+          "priority": "medium",
+          "description": "管理和调度子Agent"
+        },
+        {
+          "id": "3.4",
+          "name": "父子 Agent 通信机制",
+          "status": "pending",
+          "priority": "medium",
+          "description": "Agent间数据传递和协调"
+        }
+      ]
+    }
+  ],
+
+  "development_loop": {
+    "enabled": true,
+    "current_iteration": 1,
+    "max_iterations": 100,
+    "auto_test": true,
+    "auto_commit": false,
+    "stop_on_error": false
+  },
+
+  "test_results": {
+    "last_run": "2025-10-11T00:30:00Z",
+    "total_tests": 1,
+    "passed": 1,
+    "failed": 0,
+    "issues": [],
+    "build_status": "success"
+  },
+
+  "architecture_decisions": {
+    "sub_agent_approach": "方案A - 每个子Agent是独立的ReActAgent实例",
+    "context_management": "先实现基础版，后续扩展语义检索",
+    "context_limit": 20,
+    "tool_extensions": ["DatabaseTool (优先)", "AnalysisTool (可选)", "ReportTool (可选)"]
+  },
+
+  "next_actions": [
+    "✅ Task 1.1 - RAGFlowService 已完成",
+    "🔄 Task 1.2 - DatabaseService 进行中",
+    "开始实现 DatabaseService",
+    "编译验证",
+    "更新任务状态",
+    "继续 Task 1.3"
+  ]
+}

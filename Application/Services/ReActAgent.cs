@@ -5,21 +5,24 @@ using System.Diagnostics;
 namespace AICustomerServiceWeb2.Application.Services;
 
 /// <summary>
-/// ReAct Agent实现
+/// ReAct Agent实现 - 动态流程控制版本
 /// </summary>
 public class ReActAgent : IReActAgent
 {
+    private readonly IRequestClassifier _classifier;
     private readonly IPlanner _planner;
     private readonly IExecutor _executor;
     private readonly IReflector _reflector;
     private readonly ILogger<ReActAgent> _logger;
 
     public ReActAgent(
+        IRequestClassifier classifier,
         IPlanner planner,
         IExecutor executor,
         IReflector reflector,
         ILogger<ReActAgent> logger)
     {
+        _classifier = classifier;
         _planner = planner;
         _executor = executor;
         _reflector = reflector;
@@ -51,6 +54,33 @@ public class ReActAgent : IReActAgent
 
         try
         {
+            // **新增**: 第一步 - 分类请求
+            _logger.LogInformation("[ReActAgent] 开始分类请求");
+            var classification = await _classifier.ClassifyAsync(
+                request.UserMessage,
+                context: null,
+                cancellationToken);
+
+            _logger.LogInformation(
+                "[ReActAgent] 请求分类: {Type}, 策略: {Strategy}, 置信度: {Confidence:F2}",
+                classification.Type, classification.Strategy, classification.Confidence);
+
+            // 根据分类选择处理流程
+            switch (classification.Strategy)
+            {
+                case ProcessingStrategy.DirectResponse:
+                    return await HandleDirectResponse(request, classification, response, stopwatch, onStateChange);
+
+                case ProcessingStrategy.SimplifiedFlow:
+                    return await HandleSimplifiedFlow(request, response, stopwatch, onStateChange, cancellationToken);
+
+                case ProcessingStrategy.FullFlow:
+                default:
+                    // 继续执行原有的完整流程
+                    break;
+            }
+
+            // 完整流程: Planning → Executing → Reflecting
             // 状态：Idle → Planning
             await TransitionState(
                 AgentState.Idle,
@@ -245,7 +275,15 @@ public class ReActAgent : IReActAgent
 
     private string GenerateSuccessAnswer(ExecutionResult result, ReflectionResult reflection)
     {
-        return $"{result.FinalOutput}\n\n**反思分析：** {reflection.Analysis}";
+        // 对于会话型请求(0步骤计划),FinalOutput 为空,使用反思分析作为主要回复
+        if (string.IsNullOrEmpty(result.FinalOutput))
+        {
+            // 会话型请求,返回友好的回复
+            return "你好!我是AI智能客服助手,很高兴为您服务。有什么我可以帮助您的吗?";
+        }
+
+        // 对于任务型请求,返回执行结果
+        return $"{result.FinalOutput}\n\n**分析：** {reflection.Analysis}";
     }
 
     private string GenerateFailureAnswer(ExecutionResult result, ReflectionResult reflection)
@@ -267,5 +305,117 @@ public class ReActAgent : IReActAgent
         }
 
         return answer;
+    }
+
+    /// <summary>
+    /// 处理直接响应(会话型请求) - 最快路径
+    /// </summary>
+    private async Task<AgentResponse> HandleDirectResponse(
+        AgentRequest request,
+        RequestClassification classification,
+        AgentResponse response,
+        Stopwatch stopwatch,
+        Func<AgentState, object?, Task>? onStateChange)
+    {
+        _logger.LogInformation("[ReActAgent] 使用直接响应策略");
+
+        await TransitionState(
+            AgentState.Idle,
+            AgentState.Succeeded,
+            "会话型请求,直接响应",
+            response,
+            onStateChange);
+
+        stopwatch.Stop();
+
+        response.Success = true;
+        response.FinalState = AgentState.Succeeded;
+        response.TotalTimeMs = stopwatch.ElapsedMilliseconds;
+
+        // 根据意图生成友好回复
+        response.Answer = classification.Intent switch
+        {
+            "greeting_or_chat" => "你好!我是AI智能客服助手,很高兴为您服务。\n\n我可以帮您:\n- 查询业务数据\n- 统计分析报表\n- 回答业务问题\n\n请问有什么可以帮到您?",
+            "question_or_chat" => "我是基于 RAGFlow 和 Semantic Kernel 构建的智能客服系统,可以通过自然语言理解您的需求并查询数据库。有什么我可以帮您的吗?",
+            _ => "你好!有什么我可以帮助您的吗?"
+        };
+
+        _logger.LogInformation("[ReActAgent] 直接响应完成,耗时: {Ms}ms", response.TotalTimeMs);
+        return response;
+    }
+
+    /// <summary>
+    /// 处理简化流程(简单查询) - Planning + Executing,跳过 Reflecting
+    /// </summary>
+    private async Task<AgentResponse> HandleSimplifiedFlow(
+        AgentRequest request,
+        AgentResponse response,
+        Stopwatch stopwatch,
+        Func<AgentState, object?, Task>? onStateChange,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("[ReActAgent] 使用简化流程策略");
+
+        // Planning
+        await TransitionState(
+            AgentState.Idle,
+            AgentState.Planning,
+            "规划查询任务",
+            response,
+            onStateChange);
+
+        var plan = await _planner.CreatePlanAsync(request, cancellationToken);
+        response.Thought.InitialPlan = plan;
+
+        // Executing
+        await TransitionState(
+            AgentState.Planning,
+            AgentState.Executing,
+            "执行查询计划",
+            response,
+            onStateChange);
+
+        var executionResult = await _executor.ExecutePlanAsync(plan, request, cancellationToken);
+        response.Thought.ExecutionResult = executionResult;
+
+        if (onStateChange != null)
+        {
+            await onStateChange(AgentState.Executing, executionResult);
+        }
+
+        // 直接判断成功/失败,跳过 Reflecting
+        stopwatch.Stop();
+        response.TotalTimeMs = stopwatch.ElapsedMilliseconds;
+
+        if (executionResult.Success)
+        {
+            await TransitionState(
+                AgentState.Executing,
+                AgentState.Succeeded,
+                "查询成功完成",
+                response,
+                onStateChange);
+
+            response.Success = true;
+            response.FinalState = AgentState.Succeeded;
+            response.Answer = executionResult.FinalOutput;
+        }
+        else
+        {
+            await TransitionState(
+                AgentState.Executing,
+                AgentState.Failed,
+                "查询执行失败",
+                response,
+                onStateChange);
+
+            response.Success = false;
+            response.FinalState = AgentState.Failed;
+            response.Answer = $"抱歉,查询失败。\n\n{executionResult.ErrorMessage}";
+            response.ErrorMessage = executionResult.ErrorMessage;
+        }
+
+        _logger.LogInformation("[ReActAgent] 简化流程完成,耗时: {Ms}ms", response.TotalTimeMs);
+        return response;
     }
 }

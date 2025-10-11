@@ -1,5 +1,6 @@
 using AICustomerServiceWeb2.Core.Agent;
 using AICustomerServiceWeb2.Core.Tools;
+using AICustomerServiceWeb2.Core.Interfaces;
 using AICustomerServiceWeb2.Application.Services;
 using AICustomerServiceWeb2.Infrastructure.Tools;
 using Microsoft.SemanticKernel;
@@ -39,7 +40,16 @@ kernelBuilder.AddOpenAIChatCompletion(
 
 builder.Services.AddSingleton(kernelBuilder.Build());
 
+// 注册 HttpClient (用于 RAGFlowService)
+builder.Services.AddHttpClient<IRAGFlowService, RAGFlowService>();
+
+// 注册核心服务
+builder.Services.AddScoped<IRAGFlowService, RAGFlowService>();
+builder.Services.AddScoped<IDatabaseService, DatabaseService>();
+builder.Services.AddScoped<IConversationService, ConversationService>();
+
 // 注册Agent组件
+builder.Services.AddScoped<IRequestClassifier, RequestClassifier>();
 builder.Services.AddScoped<IPlanner, Planner>();
 builder.Services.AddScoped<IExecutor, Executor>();
 builder.Services.AddScoped<IReflector, Reflector>();
